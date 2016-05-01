@@ -109,30 +109,4 @@ int main()
     return(0);
 
 }
-/*
-u_char *send_arp(u_char *args, const struct pcap_pkthdr *header,const u_char *packet) {
-    libnet_ethernet_hdr *ethernet = (libnet_ethernet_hdr *) packet;
 
-    libnet_arp_hdr *arp = (libnet_arp_hdr *) packet;
-
-
-    for(int i = 0 ; i < 6 ; i++)
-    ethernet->ether_dhost[i]= 0xFF;
-    ethernet->ether_shost[0] = 0x00;
-    ethernet->ether_shost[1] = 0x0C;
-    ethernet->ether_shost[2] = 0x29;
-    ethernet->ether_shost[3] = 0xD6;
-    ethernet->ether_shost[4] = 0x34;
-    ethernet->ether_shost[5] = 0x31;
-
-    arp->ar_pro = ETHERTYPE_IP;
-    arp->ar_op = htons(1);
-    arp->ar_hrd = htons(1);
-    arp->ar_pln = 4;
-    arp->ar_hln = 6;
-    //arp->ar_sender = ether_aton((ether_addr *)(ethernet->ether_shost));
-    //arp->ar_sender_ip = inet_ntoa(ip_header->ip_src);
-    //arp->ar_target = {0x00,0x00,0x00,0x00,0x00,0x00};
-    //arp->ar_target_ip =;
-}
-*/
