@@ -7,20 +7,44 @@
 #include <netinet/ether.h>
 
 
+void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *s);
+struct ethernet_hdr
+{
+    uint8_t  ether_dhost[6];/* destination ethernet address */
+    uint8_t  ether_shost[6];/* source ethernet address */
+    uint16_t ether_type;                 /* protocol */
+};
+
+
+struct arp_hdr
+{
+    uint16_t ar_hrd;         /* format of hardware address */
+    uint16_t ar_pro;         /* format of protocol address */
+    uint8_t  ar_hln;         /* length of hardware address */
+    uint8_t  ar_pln;         /* length of protocol addres */
+    uint16_t ar_op;          /* operation type */
+    u_char  ar_sendermac[6];
+    u_char  ar_sendip[4];
+    u_char  ar_targetmac[6];
+    u_char  ar_targetip[4];
+
+
+};
+
 
 struct sum //packging packet
 {
-    libnet_ethernet_hdr a;
-    libnet_arp_hdr b;
+    ethernet_hdr a;
+    arp_hdr b;
 };
 
-int main(int args,char argv[])
+int main(int args,char *argv[])
 
 {
-
-
+    ethernet_hdr e;
+    arp_hdr a;
     sum *s;
-
+    s = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
     pcap_t *handle;            /* Session handle */
 
     char *dev;            /* The device to sniff on */
@@ -51,61 +75,50 @@ int main(int args,char argv[])
     }
 
 
-    libnet_ethernet_hdr ethernet_header;
-    libnet_arp_hdr arp;
+    for(int i = 0 ; i< 6 ; i++)
+    e.ether_dhost[i] = 0xFF;
+     //source mac
+    e.ether_shost[1] = 0x0c;
+    e.ether_shost[2] = 0x29;
+    e.ether_shost[3] = 0xd6;
+    e.ether_shost[4] = 0x34;
+    e.ether_shost[5] = 0x32;
+    e.ether_type = htons(ETHERTYPE_ARP); //claer
+    a.ar_hln = 6;//hawdware szie
+    a.ar_pln = 4;//protocol size
+    a.ar_hrd = htons(ARPHRD_ETHER);
+    a.ar_pro = htons(ETHERTYPE_IP);
+    a.ar_op = htons(ARPOP_REQUEST);
+    a.ar_sendermac[0] = 0x00;
+    a.ar_sendermac[1] = 0x0c;
+    a.ar_sendermac[2] = 0x29;
+    a.ar_sendermac[3] = 0xd6;
+    a.ar_sendermac[4] = 0x34;
+    a.ar_sendermac[5] = 0x32;
+    char my_ip[] = "192.168.7.131";
+    in_addr senderip, targetip , targetip2;
 
-    ethernet_header.ether_dhost[0] = 0xFF;
-    ethernet_header.ether_dhost[1] = 0xFF;//destination mac
-    ethernet_header.ether_dhost[2] = 0xFF;
-    ethernet_header.ether_dhost[3] = 0xFF;
-    ethernet_header.ether_dhost[4] = 0xFF;
-    ethernet_header.ether_dhost[5] = 0xFF;
-    ethernet_header.ether_shost[0] = 0x00; //source mac
-    ethernet_header.ether_shost[1] = 0x0c;
-    ethernet_header.ether_shost[2] = 0x29;
-    ethernet_header.ether_shost[3] = 0xd6;
-    ethernet_header.ether_shost[4] = 0x34;
-    ethernet_header.ether_shost[5] = 0x32;
-    ethernet_header.ether_type = htons(ETHERTYPE_ARP);
-    arp.ar_hln = 6;
-    arp.ar_pln = 4;
-    arp.ar_hrd = htons(ARPHRD_ETHER);
-    arp.ar_pro = htons(0x0800);
-    arp.ar_op = htons(ARPOP_REQUEST);
-    arp.ar_sendermac[0] = 0x00;
-    arp.ar_sendermac[1] = 0x0c;
-    arp.ar_sendermac[2] = 0x29;
-    arp.ar_sendermac[3] = 0xd6;
-    arp.ar_sendermac[4] = 0x34;
-    arp.ar_sendermac[5] = 0x32;
+    inet_aton(my_ip,&senderip); // device ip
+    inet_aton(argv[1],&targetip2); // the other ip
+    inet_aton(argv[2],&targetip);
+    memcpy(a.ar_sendip, &senderip, sizeof(a.ar_sendip));
+    memcpy(a.ar_targetip, &targetip, sizeof(a.ar_targetip));
 
-    char *sender_ip , *target_ip;
-
-    sender_ip = strtok(&argv[0],".");
-    target_ip = strtok(&argv[1],".");
-    printf("%d",argv[0]);
-    for(int i = 0 ; i < 4 ; i++)
-    {
-        arp.ar_senderip[i] = htons(sender_ip[i]);
-        arp.ar_targetip[i] = htons(target_ip[i]);
-    }
     for(int i = 0; i<6 ; i++)
-        arp.ar_targetmac[i] = 0x00;
+    a.ar_targetmac[i] = 0x00;
+    s->a = e; //ethernet
+    s->b = a; //arp
 
+    const u_char *c = (u_char *)s;
 
-
-
-
-    s = (sum*)malloc(sizeof(ethernet_header) + sizeof(arp));
-    s->a = ethernet_header;
-    s->b = arp;
-    const u_char *a = (u_char*)s;
-
-    if(pcap_sendpacket(handle,a,sizeof(*s)) != 0)
+    if(pcap_sendpacket(handle,c,sizeof(*s)) != 0)
         printf("packet send error!!!\n");
     else
-        printf("send packet!!\n");
+    {
 
+        printf("send packet!!\n");
+       // pcap_loop(handle, -1, reply_arp, NULL);
+    }
 
 
     /* And close the session */
@@ -115,6 +128,11 @@ int main(int args,char argv[])
 
     return(0);
 
-    // ..
 
 }
+/*
+void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
+{
+
+}
+*/
