@@ -37,12 +37,13 @@ struct sum //packging packet
     ethernet_hdr a;
     arp_hdr b;
 };
-
+ethernet_hdr e;
+arp_hdr a;
+u_char macaddress[6];
 int main(int args,char *argv[])
 
 {
-    ethernet_hdr e;
-    arp_hdr a;
+
     sum *s;
     s = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
     pcap_t *handle;            /* Session handle */
@@ -117,7 +118,7 @@ int main(int args,char *argv[])
     {
 
         printf("send packet!!\n");
-       // pcap_loop(handle, -1, reply_arp, NULL);
+        pcap_loop(handle, -1, reply_arp, NULL);
     }
 
 
@@ -130,9 +131,21 @@ int main(int args,char *argv[])
 
 
 }
-/*
+
 void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
 
+    ethernet_hdr *ethernet = (ethernet_hdr *) packet;
+    if(ntohs(ethernet->ether_type) == ETHERTYPE_ARP)
+    {  arp_hdr *arp_packet = (arp_hdr *)(packet + sizeof(ethernet_hdr));
+
+        if(ntohs(arp_packet->ar_pro) == ETHERTYPE_IP && ntohs(arp_packet->ar_op) ==ARPOP_REPLY)
+            if(memcmp(arp_packet->ar_sendip,a.ar_targetip,sizeof(a.ar_sendip))==0)
+                memcpy(arp_packet->ar_sendermac,&macaddress,6);
+
+
+    }
+
+
 }
-*/
+
