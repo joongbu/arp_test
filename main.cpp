@@ -5,11 +5,9 @@
 #include <libnet.h>
 #include <arpa/inet.h>
 #include <netinet/ether.h>
-
-//#include <pthread.h>
+#include <pthread.h>
 int send_arp(pcap_t *h,const u_char *arp_packet, u_char *sum1);
 void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *s);
-
 static void *readingpacket(pcap_t *h);
 void gateway_sendpacket(pcap_t h);
 void host_sendpacket(pcap_t h);
@@ -45,14 +43,16 @@ arp_hdr a,b1;
 //my ethernet
 uint8_t myethernet[6] = {0x0c,0x29,0xd6,0x34,0x32}; //ethernetmac address
 uint8_t broadcastmac[6] = {0xff,0xff,0xff,0xff,0xff};
-char my_ip[] = "192.168.7.133";
+char my_ip[] = "192.168.17.133";
 //know mac ip
 u_char gateway_ip[4],host_ip[4];
 u_char *gatewaymac, *hostmac;
-//function address
 u_char macaddress[6];
-//pthread_t t;
+pthread_t tid;
  in_addr senderip, targetip , target_hostip; // targetip = gateway, targetip2 = hostip
+
+ void *thread(void *unused);
+
 int main(int args,char *argv[])
 
 {
@@ -108,7 +108,7 @@ int main(int args,char *argv[])
     memcpy(a.ar_targetip, &targetip, sizeof(a.ar_targetip));
     for(int i = 0; i<6 ; i++)
     a.ar_targetmac[i] = 0x00;
-/*  tring host_ arp_request
+
 
     s = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
     s->a = e; //ethernet
@@ -129,19 +129,24 @@ int main(int args,char *argv[])
     s1 = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
     s1->a =e;
     s1->b =b1;
-
-*/
     const u_char *c1 = (u_char *)s1;
+
     printf("hostpakcet\nsource ip : %s\n",inet_ntoa(senderip));
     printf("destinaion ip ; %s\n",inet_ntoa(targetip));
-    if(/*pcap_sendpacket(handle,c,sizeof(*s)) == 0 &&*/ pcap_sendpacket(handle,c1,sizeof(*s1) == 0))
+    if(pcap_sendpacket(handle,c,sizeof(*s)) == 0 && pcap_sendpacket(handle,c1,sizeof(*s1) == 0)) //block : host_pc is not reply
     {
         printf("packetsend!!\n ");
         pcap_loop(handle, -1, reply_arp, NULL);//thread
 
     }
+    while(1)
+    {
 
 
+        pthread_create(&tid,NULL,&thread,NULL);
+        printf("thread start :");
+        sleep(2);
+    }
 
 
 
@@ -180,7 +185,7 @@ void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *pac
                     gatewaymac = macaddress;
 
                 }
-                if(memcmp(arp_packet->ar_sendip,h_ip,sizeof(a.ar_sendip))==0)
+                else if(memcmp(arp_packet->ar_sendip,h_ip,sizeof(a.ar_sendip))==0)
                 {
                     memcpy(macaddress,ethernet->ether_shost,6);
                     printf("host mac : %s\n",ether_ntoa((ether_addr *)(ethernet->ether_shost)));
@@ -248,3 +253,11 @@ void host_sendpacket(pcap_t *h)
 }
 
 
+void *thread(void *unused)
+{
+    while(1)
+    {
+    void gateway_sendpacket();
+    void host_sendpacket();
+    }
+}
